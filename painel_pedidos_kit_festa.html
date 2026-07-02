@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Pedidos — Kit Festa</title>
+
+<!-- ==========================================================
+     BIBLIOTECA EXTERNA: SheetJS (lê arquivos .csv, .xls e .xlsx
+     direto no navegador, sem precisar de servidor).
+     ========================================================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Fontes: Fraunces (títulos, com personalidade) + Inter (leitura)
+     + JetBrains Mono (números e códigos, para alinhar bem) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ==========================================================
+     TOKENS DE DESIGN — paleta inspirada em etiqueta de presente
+     (kraft paper + barbante colorido), combinando com o tema
+     "Kit Festa".
+     ========================================================== */
+  :root{
+    --paper:      #FAF6EC;
+    --paper-2:    #F1EADA;
+    --ink:        #2B2118;
+    --ink-soft:   #6B5F4F;
+    --teal:       #1F3A3D;
+    --mustard:    #F2B705;
+    --urgent:     #E4572E;
+    --atraso:     #B3261E;
+    --ok:         #3A7D63;
+    --border:     #E1D6BC;
+    --card-bg:    #FFFFFF;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 60px;
+  }
+
+  h1, h2, h3{
+    font-family: 'Fraunces', serif;
+    margin: 0;
+  }
+
+  .mono{ font-family: 'JetBrains Mono', monospace; }
+
+  /* ---------- CABEÇALHO ---------- */
+  header{
+    background: var(--teal);
+    color: var(--paper);
+    padding: 28px 20px 32px;
+  }
+  header .wrap{
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  header h1{
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+    font-weight: 700;
+  }
+  header p{
+    margin: 6px 0 0;
+    color: #C9DAD6;
+    font-size: 0.95rem;
+  }
+
+  /* ---------- ÁREA DE UPLOAD ---------- */
+  .upload-box{
+    max-width: 1000px;
+    margin: -20px auto 0;
+    padding: 0 20px;
+  }
+  .upload-card{
+    background: var(--card-bg);
+    border: 1.5px dashed var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 8px 24px rgba(43,33,24,0.08);
+  }
+  .upload-card label.btn{
+    background: var(--mustard);
+    color: var(--ink);
+    font-weight: 600;
+    padding: 11px 18px;
+    border-radius: 9px;
+    cursor: pointer;
+    border: none;
+    font-size: 0.92rem;
+    transition: transform .12s ease;
+  }
+  .upload-card label.btn:hover{ transform: translateY(-1px); }
+  .upload-card input[type=file]{ display:none; }
+  .file-status{
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  /* ---------- ESTATÍSTICAS PONTUAIS ---------- */
+  .stats{
+    max-width: 1000px;
+    margin: 20px auto 0;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  .stat-card{
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .stat-card .num{
+    font-family: 'Fraunces', serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  .stat-card .label{
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .stat-card.urgente .num{ color: var(--urgent); }
+  .stat-card.atrasado .num{ color: var(--atraso); }
+  .stat-card.ok .num{ color: var(--ok); }
+
+  /* ---------- BUSCA ---------- */
+  .search-row{
+    max-width: 1000px;
+    margin: 18px auto 0;
+    padding: 0 20px;
+  }
+  .search-row input{
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    background: var(--card-bg);
+  }
+
+  /* ---------- LISTA DE PEDIDOS (etiquetas) ---------- */
+  .orders{
+    max-width: 1000px;
+    margin: 18px auto 0;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+
+  .tag{
+    position: relative;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 16px 16px 22px;
+    overflow: hidden;
+  }
+  /* barra colorida à esquerda = "barbante" indicando urgência */
+  .tag::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width: 7px;
+    background: var(--status-color, var(--ok));
+  }
+  /* furo de etiqueta */
+  .tag::after{
+    content:"";
+    position:absolute;
+    left: 10px; top: 16px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 1.5px solid var(--border);
+  }
+
+  .tag-top{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .tag-id{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+  .badge{
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    color: #fff;
+    background: var(--status-color, var(--ok));
+    white-space: nowrap;
+  }
+  .tag h3{
+    font-size: 1.05rem;
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+  .tema{
+    font-size: 0.86rem;
+    color: var(--teal);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .tag dl{
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    row-gap: 4px;
+    column-gap: 8px;
+    font-size: 0.85rem;
+  }
+  .tag dt{ color: var(--ink-soft); }
+  .tag dd{ margin:0; text-align: right; }
+
+  .producao-line{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.85rem;
+  }
+  .producao-line .dias{
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--status-color, var(--ok));
+  }
+
+  .empty-state{
+    max-width: 1000px;
+    margin: 60px auto;
+    padding: 0 20px;
+    text-align: center;
+    color: var(--ink-soft);
+  }
+  .empty-state h2{ color: var(--ink); margin-bottom: 8px; }
+
+  @media (max-width: 480px){
+    .orders{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Painel de Pedidos — Kit Festa</h1>
+    <p>Carregue a planilha da pasta Downloads para ver prazos e temas de produção.</p>
+  </div>
+</header>
+
+<div class="upload-box">
+  <div class="upload-card">
+    <label class="btn">
+      Selecionar planilha (.csv / .xlsx)
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+    </label>
+    <span class="file-status" id="fileStatus">Nenhum arquivo carregado ainda.</span>
+  </div>
+</div>
+
+<div id="statsBox" class="stats" style="display:none;"></div>
+
+<div id="searchBox" class="search-row" style="display:none;">
+  <input type="text" id="searchInput" placeholder="Buscar por ID do pedido, comprador ou tema...">
+</div>
+
+<div id="ordersBox" class="orders"></div>
+
+<div id="emptyState" class="empty-state">
+  <h2>Nenhum pedido carregado</h2>
+  <p>Clique em "Selecionar planilha" acima e escolha o arquivo da sua pasta Downloads.</p>
+</div>
+
+<script>
+/* ==============================================================
+   CONFIGURAÇÃO: nomes das colunas esperadas na planilha.
+   Guardamos aqui uma "chave interna" (usada no código) e uma
+   lista de possíveis nomes de coluna (para o app reconhecer a
+   coluna mesmo com pequenas variações de escrita/acentuação).
+   ============================================================== */
+const MAPA_COLUNAS = {
+  idPedido:      ["ID DO PEDIDO"],
+  dataPrevista:  ["DATA PREVISTA DE ENVIO"],
+  dtCompra:      ["DT COMPRA", "DATA DA COMPRA"],
+  nomeProduto:   ["NOME DO PRODUTO"],
+  nomeVariacao:  ["NOME DA VARIACAO", "NOME DA VARIAÇÃO"],
+  quantidade:    ["QUANTIDADE"],
+  numProdutos:   ["NUMERO DE PRODUTOS PEDIDOS", "NÚMERO DE PRODUTOS PEDIDOS"],
+  comprador:     ["NOME DE USUARIO (COMPRADOR)", "NOME DE USUÁRIO (COMPRADOR)"],
+  endereco:      ["ENDERECO DE ENTREGA", "ENDEREÇO DE ENTREGA"],
+};
+
+const DIAS_PRODUCAO = 5; // prazo padrão: DT COMPRA + 5 dias corridos
+
+/* ==============================================================
+   [INÍCIO] normalizarTexto
+   Remove acentos e deixa em maiúsculas, para comparar nomes de
+   coluna sem depender de acentuação exata do arquivo original.
+   ============================================================== */
+function normalizarTexto(txt){
+  return String(txt || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+/* [FIM] normalizarTexto */
+
+
+/* ==============================================================
+   [INÍCIO] encontrarIndiceColuna
+   Dado o cabeçalho da planilha (primeira linha) e uma lista de
+   nomes possíveis, descobre em qual posição (índice) está a
+   coluna procurada.
+   ============================================================== */
+function encontrarIndiceColuna(cabecalho, nomesPossiveis){
+  const cabecalhoNormalizado = cabecalho.map(normalizarTexto);
+  for (const nome of nomesPossiveis){
+    const alvo = normalizarTexto(nome);
+    const idx = cabecalhoNormalizado.findIndex(h => h === alvo || h.includes(alvo));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+/* [FIM] encontrarIndiceColuna */
+
+
+/* ==============================================================
+   [INÍCIO] converterParaData
+   Converte um valor vindo da planilha (pode ser texto "DD/MM/AAAA",
+   número de série do Excel, ou já um objeto Date) em um objeto
+   Date do JavaScript, zerando as horas para comparar só o dia.
+   ============================================================== */
+function converterParaData(valor){
+  if (!valor) return null;
+
+  if (valor instanceof Date){
+    return new Date(valor.getFullYear(), valor.getMonth(), valor.getDate());
+  }
+
+  // número de série do Excel (dias desde 30/12/1899)
+  if (typeof valor === "number"){
+    const dataBase = new Date(Math.round((valor - 25569) * 86400 * 1000));
+    return new Date(dataBase.getUTCFullYear(), dataBase.getUTCMonth(), dataBase.getUTCDate());
+  }
+
+  // texto no formato brasileiro DD/MM/AAAA (pode ter hora junto)
+  if (typeof valor === "string"){
+    const soData = valor.trim().split(" ")[0];
+    const partes = soData.split("/");
+    if (partes.length === 3){
+      const [dia, mes, ano] = partes.map(Number);
+      if (dia && mes && ano) return new Date(ano, mes - 1, dia);
+    }
+  }
+
+  return null;
+}
+/* [FIM] converterParaData */
+
+
+/* ==============================================================
+   [INÍCIO] calcularProgramacaoEnvio
+   Regra do cliente: pega a DT COMPRA, soma 5 dias corridos, e
+   calcula quantos dias restam a partir de hoje para a produção.
+   Retorna a data-prazo e os dias restantes (pode ser negativo,
+   o que indica pedido atrasado).
+   ============================================================== */
+function calcularProgramacaoEnvio(dtCompra){
+  const dataCompra = converterParaData(dtCompra);
+  if (!dataCompra) return { prazo: null, diasRestantes: null };
+
+  const prazo = new Date(dataCompra);
+  prazo.setDate(prazo.getDate() + DIAS_PRODUCAO);
+
+  const hoje = new Date();
+  const hojeSemHora = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+
+  const diffMs = prazo - hojeSemHora;
+  const diasRestantes = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  return { prazo, diasRestantes };
+}
+/* [FIM] calcularProgramacaoEnvio */
+
+
+/* ==============================================================
+   [INÍCIO] calcularTema
+   Regra do cliente: pega o texto que vem depois da palavra
+   "KIT FESTA" no nome do produto, e junta com o nome da variação.
+   Ex: produto "KIT FESTA SAFARI" + variação "KIT 35 PÇ, VERDE"
+       => Tema = "SAFARI KIT 35 PÇ, VERDE"
+   Se "KIT FESTA" não for encontrado, usa o nome do produto inteiro.
+   ============================================================== */
+function calcularTema(nomeProduto, nomeVariacao){
+  const produto = String(nomeProduto || "").trim();
+  const variacao = String(nomeVariacao || "").trim();
+
+  const marcador = "KIT FESTA";
+  const posicao = normalizarTexto(produto).indexOf(marcador);
+
+  let parteProduto;
+  if (posicao !== -1){
+    parteProduto = produto.slice(posicao + marcador.length).trim();
+  } else {
+    parteProduto = produto; // fallback: não achou "KIT FESTA"
+  }
+
+  return [parteProduto, variacao].filter(Boolean).join(" ");
+}
+/* [FIM] calcularTema */
+
+
+/* ==============================================================
+   [INÍCIO] classificarStatus
+   Define a cor/etiqueta de status a partir dos dias restantes
+   para produção.
+   ============================================================== */
+function classificarStatus(diasRestantes){
+  if (diasRestantes === null) return { texto: "SEM DATA", cor: "var(--ink-soft)" };
+  if (diasRestantes < 0)      return { texto: "ATRASADO", cor: "var(--atraso)" };
+  if (diasRestantes <= 1)     return { texto: "URGENTE",  cor: "var(--urgent)" };
+  if (diasRestantes <= 3)     return { texto: "ATENÇÃO",  cor: "var(--mustard)" };
+  return                            { texto: "NO PRAZO", cor: "var(--ok)" };
+}
+/* [FIM] classificarStatus */
+
+
+/* ==============================================================
+   [INÍCIO] formatarData
+   Formata um objeto Date para o padrão brasileiro DD/MM/AAAA.
+   ============================================================== */
+function formatarData(data){
+  if (!data) return "—";
+  const dd = String(data.getDate()).padStart(2, "0");
+  const mm = String(data.getMonth() + 1).padStart(2, "0");
+  const yy = data.getFullYear();
+  return `${dd}/${mm}/${yy}`;
+}
+/* [FIM] formatarData */
+
+
+/* ==============================================================
+   ESTADO GLOBAL: guarda os pedidos já processados, para permitir
+   filtrar/buscar sem precisar reler o arquivo.
+   ============================================================== */
+let pedidosProcessados = [];
+
+
+/* ==============================================================
+   [INÍCIO] processarPlanilha
+   Recebe os dados brutos lidos do arquivo (array de arrays) e
+   devolve uma lista de objetos "pedido", já com os campos
+   calculados (Programação de Envio e Tema).
+   ============================================================== */
+function processarPlanilha(linhas){
+  const cabecalho = linhas[0];
+
+  // Descobre em qual coluna está cada informação
+  const indices = {};
+  for (const chave in MAPA_COLUNAS){
+    indices[chave] = encontrarIndiceColuna(cabecalho, MAPA_COLUNAS[chave]);
+  }
+
+  const dados = linhas.slice(1).filter(linha => linha.some(v => v !== undefined && v !== ""));
+
+  return dados.map(linha => {
+    const pegar = (chave) => indices[chave] !== -1 ? linha[indices[chave]] : "";
+
+    const dtCompraValor = pegar("dtCompra");
+    const { prazo, diasRestantes } = calcularProgramacaoEnvio(dtCompraValor);
+    const tema = calcularTema(pegar("nomeProduto"), pegar("nomeVariacao"));
+
+    return {
+      idPedido: pegar("idPedido"),
+      dataPrevista: pegar("dataPrevista"),
+      dtCompra: converterParaData(dtCompraValor),
+      nomeProduto: pegar("nomeProduto"),
+      nomeVariacao: pegar("nomeVariacao"),
+      quantidade: pegar("quantidade"),
+      numProdutos: pegar("numProdutos"),
+      comprador: pegar("comprador"),
+      endereco: pegar("endereco"),
+      tema: tema,
+      prazoProducao: prazo,
+      diasRestantes: diasRestantes,
+    };
+  });
+}
+/* [FIM] processarPlanilha */
+
+
+/* ==============================================================
+   [INÍCIO] renderizarEstatisticas
+   Mostra os números pontuais que o cliente pediu: total de
+   pedidos, quantos estão atrasados, urgentes e no prazo.
+   ============================================================== */
+function renderizarEstatisticas(pedidos){
+  const total = pedidos.length;
+  const atrasados = pedidos.filter(p => p.diasRestantes !== null && p.diasRestantes < 0).length;
+  const urgentes = pedidos.filter(p => p.diasRestantes !== null && p.diasRestantes >= 0 && p.diasRestantes <= 1).length;
+  const noPrazo = pedidos.filter(p => p.diasRestantes !== null && p.diasRestantes > 1).length;
+
+  const box = document.getElementById("statsBox");
+  box.style.display = "grid";
+  box.innerHTML = `
+    <div class="stat-card">
+      <div class="num">${total}</div>
+      <div class="label">Total de pedidos</div>
+    </div>
+    <div class="stat-card atrasado">
+      <div class="num">${atrasados}</div>
+      <div class="label">Atrasados</div>
+    </div>
+    <div class="stat-card urgente">
+      <div class="num">${urgentes}</div>
+      <div class="label">Urgentes (0-1 dia)</div>
+    </div>
+    <div class="stat-card ok">
+      <div class="num">${noPrazo}</div>
+      <div class="label">No prazo</div>
+    </div>
+  `;
+}
+/* [FIM] renderizarEstatisticas */
+
+
+/* ==============================================================
+   [INÍCIO] renderizarPedidos
+   Desenha os cartões (etiquetas) de cada pedido na tela.
+   ============================================================== */
+function renderizarPedidos(pedidos){
+  const box = document.getElementById("ordersBox");
+  const empty = document.getElementById("emptyState");
+
+  if (pedidos.length === 0){
+    box.innerHTML = "";
+    empty.style.display = "block";
+    empty.querySelector("h2").textContent = "Nenhum pedido encontrado";
+    empty.querySelector("p").textContent = "Tente ajustar a busca ou carregue outro arquivo.";
+    return;
+  }
+  empty.style.display = "none";
+
+  // ordena: mais urgente primeiro
+  const ordenados = [...pedidos].sort((a, b) => {
+    if (a.diasRestantes === null) return 1;
+    if (b.diasRestantes === null) return -1;
+    return a.diasRestantes - b.diasRestantes;
+  });
+
+  box.innerHTML = ordenados.map(p => {
+    const status = classificarStatus(p.diasRestantes);
+    const diasTexto = p.diasRestantes === null
+      ? "sem data"
+      : p.diasRestantes < 0
+        ? `${Math.abs(p.diasRestantes)} dia(s) atrasado`
+        : `${p.diasRestantes} dia(s) restante(s)`;
+
+    return `
+      <div class="tag" style="--status-color:${status.cor}">
+        <div class="tag-top">
+          <span class="tag-id mono">#${p.idPedido || "—"}</span>
+          <span class="badge">${status.texto}</span>
+        </div>
+        <h3>${p.nomeProduto || "Produto sem nome"}</h3>
+        <div class="tema">Tema: ${p.tema || "—"}</div>
+        <dl>
+          <dt>Comprador</dt><dd>${p.comprador || "—"}</dd>
+          <dt>Quantidade</dt><dd>${p.quantidade || "—"}</dd>
+          <dt>Nº produtos</dt><dd>${p.numProdutos || "—"}</dd>
+          <dt>Endereço</dt><dd>${p.endereco || "—"}</dd>
+          <dt>DT Compra</dt><dd>${formatarData(p.dtCompra)}</dd>
+          <dt>Prev. envio (planilha)</dt><dd>${p.dataPrevista || "—"}</dd>
+        </dl>
+        <div class="producao-line">
+          <span>Prazo produção: <strong>${formatarData(p.prazoProducao)}</strong></span>
+          <span class="dias">${diasTexto}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+/* [FIM] renderizarPedidos */
+
+
+/* ==============================================================
+   [INÍCIO] listener do input de arquivo
+   Quando o usuário escolhe o arquivo, lê o conteúdo com a
+   biblioteca SheetJS, processa e desenha tudo na tela.
+   ============================================================== */
+document.getElementById("fileInput").addEventListener("change", function(evento){
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+
+  document.getElementById("fileStatus").textContent = "Lendo arquivo...";
+
+  const leitor = new FileReader();
+  leitor.onload = function(e){
+    try{
+      const dadosBrutos = new Uint8Array(e.target.result);
+      const planilha = XLSX.read(dadosBrutos, { type: "array", cellDates: true });
+      const primeiraAba = planilha.Sheets[planilha.SheetNames[0]];
+      const linhas = XLSX.utils.sheet_to_json(primeiraAba, { header: 1, defval: "" });
+
+      pedidosProcessados = processarPlanilha(linhas);
+
+      document.getElementById("fileStatus").textContent =
+        `Arquivo: ${arquivo.name} — ${pedidosProcessados.length} pedido(s) carregado(s).`;
+      document.getElementById("searchBox").style.display = "block";
+
+      renderizarEstatisticas(pedidosProcessados);
+      renderizarPedidos(pedidosProcessados);
+    } catch(erro){
+      document.getElementById("fileStatus").textContent =
+        "Não foi possível ler esse arquivo. Confira se é um .csv ou .xlsx válido.";
+      console.error(erro);
+    }
+  };
+  leitor.readAsArrayBuffer(arquivo);
+});
+/* [FIM] listener do input de arquivo */
+
+
+/* ==============================================================
+   [INÍCIO] listener da busca
+   Filtra os pedidos já carregados por ID, comprador ou tema,
+   sem precisar reler o arquivo.
+   ============================================================== */
+document.getElementById("searchInput").addEventListener("input", function(evento){
+  const termo = normalizarTexto(evento.target.value);
+  if (!termo){
+    renderizarPedidos(pedidosProcessados);
+    return;
+  }
+  const filtrados = pedidosProcessados.filter(p =>
+    normalizarTexto(p.idPedido).includes(termo) ||
+    normalizarTexto(p.comprador).includes(termo) ||
+    normalizarTexto(p.tema).includes(termo)
+  );
+  renderizarPedidos(filtrados);
+});
+/* [FIM] listener da busca */
+</script>
+</body>
+</html>
